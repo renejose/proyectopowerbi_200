@@ -1,73 +1,152 @@
 import pandas as pd
-import random
-import datetime
+import tkinter as tk
+import os
+import re
+from tkinter import filedialog, messagebox
+from tkinter import ttk
 
+def obtener_mes_desde_nombre(ruta_archivo):
+    nombre = os.path.basename(ruta_archivo)
+    match = re.search(r'_(\d{1,2})\.xlsx$', nombre)
 
-# Función para generar fechas aleatorias en enero de 2024
-def fecha_aleatoria(mes):
-    inicio = datetime.date(2024, mes, 1)
-    fin = datetime.date(2024, mes, 30)
-    delta = (fin - inicio).days
-    return inicio + datetime.timedelta(days=random.randint(0, delta))
+    if match:
+        mes_num = int(match.group(1))
+        return mes_num
+    return None
 
-# Listas de datos de ejemplo
-def generar_datos(mes):
-    departamentos = ["Lima", "Arequipa", "Cusco", "Trujillo", "Piura", "Iquitos", "Chiclayo", "Tacna", "Puno", "Ayacucho"]
-    laboratorios = ["Lab Clínico A", "Lab Clínico B", "Lab Clínico C", "Lab Clínico D", "Lab Clínico E"]
-    medicamentos = [
-        "Paracetamol", "Ibuprofeno", "Amoxicilina", "Diclofenaco", "Aspirina", "Omeprazol", "Metformina",
-        "Losartán", "Atorvastatina", "Loratadina", "Clorfenamina", "Naproxeno", "Salbutamol", "Dexametasona"
-    ]
-    sucursales = ["Sucursal1", "Sucursal2", "Sucursal3", "Sucursal4"]
-    categorias = ["Analgésico", "Antibiótico", "Antihistamínico", "Antiácido", "Hipoglucemiante"]
-    presentaciones = ["Tabletas", "Jarabe", "Inyectable", "Cápsulas", "Suspensión"]
-    requiere_receta = ["Sí", "No"]
-    vendedores = ["Juan Pérez", "María García", "Carlos Fernández", "Ana López"]
-    metodos_pago = ["Efectivo", "Tarjeta", "Seguro"]
-    clientes = ["Cliente Frecuente", "Nuevo Cliente", "Cliente VIP", "Sin Registro"]
+def procesar_excel(ruta_archivo):
+    try:
+        nombre_salida = ''
+        df_origen = pd.read_excel(ruta_archivo)
+        mes_num = obtener_mes_desde_nombre(ruta_archivo)
 
-    # Número de registros
-    num_registros = 1000
+        MESES = {
+            1: "enero", 2: "febrero", 3: "marzo", 4: "abril",
+            5: "mayo", 6: "junio", 7: "julio", 8: "agosto",
+            9: "septiembre", 10: "octubre", 11: "noviembre", 12: "diciembre"
+        }
 
-    # Generar datos
-    registros = []
-    for i in range(num_registros):
-        fecha = fecha_aleatoria(mes)
-        departamento = random.choice(departamentos)
-        sucursal = random.choice(sucursales)
-        medicamento = random.choice(medicamentos)
-        laboratorio = random.choice(laboratorios)
-        cantidad = random.randint(1, 10)
-        precio_unitario = round(random.uniform(5, 100), 2)
-        total = round(cantidad * precio_unitario, 2)
-        categoria = random.choice(categorias)
-        presentacion = random.choice(presentaciones)
-        receta = random.choice(requiere_receta)
-        vendedor = random.choice(vendedores)
-        hora_venta = f"{random.randint(8, 22)}:{random.randint(0, 59):02d}"
-        metodo_pago = random.choice(metodos_pago)
-        descuento = round(random.uniform(0, 10), 2) if random.random() < 0.3 else 0  # 30% chance de descuento
-        cliente = random.choice(clientes)
+        if mes_num and mes_num in MESES:
+            print(MESES[mes_num])
+            nombre_salida = f"modelo_datos_ventas_{MESES[mes_num]}.xlsx"
+            # 👉 alternativa numérica
+            # nombre_salida = f"modelo_datos_ventas_{mes_num}.xlsx"
+        else:
+            nombre_salida = "modelo_datos_ventas.xlsx"
 
-        registros.append([
-            i + 1, fecha.strftime("%Y-%m-%d"), departamento, sucursal, medicamento, laboratorio, cantidad, precio_unitario, total,
-            categoria, presentacion, receta, vendedor, hora_venta, metodo_pago, descuento, cliente
+        dimensiones = {}
+        dimensiones_nombres = [
+            "Departamento", "Sucursal", "Medicamento", "Laboratorio", "Categoría",
+            "Presentación", "Requiere Receta", "Vendedor", "Método de Pago", "Cliente"
+        ]
+
+        # Crear diccionarios de dimensiones
+        for col in dimensiones_nombres:
+            valores_unicos = df_origen[col].dropna().unique()
+            dimensiones[col] = {valor: idx + 1 for idx, valor in enumerate(valores_unicos)}
+
+        # Crear tablas de dimensiones
+        tablas_dimensiones = {}
+        for col in dimensiones_nombres:
+            tablas_dimensiones[col] = pd.DataFrame(
+                list(dimensiones[col].items()),
+                columns=[col, f"ID_{col}"]
+            )
+
+        # Crear tabla de hechos
+        registros = []
+        for _, row in df_origen.iterrows():
+            fecha = pd.to_datetime(row["Fecha Venta"])
+            registros.append([
+                row["ID"], fecha, fecha.year, fecha.month, fecha.day,
+                dimensiones["Departamento"].get(row["Departamento"]),
+                row["Departamento"],
+                dimensiones["Sucursal"].get(row["Sucursal"]),
+                row["Sucursal"],
+                dimensiones["Medicamento"].get(row["Medicamento"]),
+                row["Medicamento"],
+                dimensiones["Laboratorio"].get(row["Laboratorio"]),
+                row["Laboratorio"],
+                row["Cantidad Vendida"],
+                row["Precio Unitario"],
+                row["Total Venta"],
+                dimensiones["Categoría"].get(row["Categoría"]),
+                row["Categoría"],
+                dimensiones["Presentación"].get(row["Presentación"]),
+                row["Presentación"],
+                dimensiones["Requiere Receta"].get(row["Requiere Receta"]),
+                row["Requiere Receta"],
+                dimensiones["Vendedor"].get(row["Vendedor"]),
+                row["Vendedor"],
+                row["Hora Venta"],
+                dimensiones["Método de Pago"].get(row["Método de Pago"]),
+                row["Método de Pago"],
+                row["Descuento"],
+                dimensiones["Cliente"].get(row["Cliente"]),
+                row["Cliente"]
+            ])
+
+        df_hechos = pd.DataFrame(registros, columns=[
+            "ID_Venta", "Fecha_Venta", "Año", "Mes", "Día",
+            "ID_Departamento", "Departamento",
+            "ID_Sucursal", "Sucursal",
+            "ID_Medicamento", "Medicamento",
+            "ID_Laboratorio", "Laboratorio",
+            "Cantidad_Vendida", "Precio_Unitario", "Total_Venta",
+            "ID_Categoría", "Categoría",
+            "ID_Presentación", "Presentación",
+            "ID_Requiere_Receta", "Requiere_Receta",
+            "ID_Vendedor", "Vendedor",
+            "Hora_Venta",
+            "ID_Método_Pago", "Método_Pago",
+            "Descuento",
+            "ID_Cliente", "Cliente"
         ])
 
-    # Crear DataFrame con las nuevas columnas
-    df = pd.DataFrame(registros, columns=[
-        "ID", "Fecha Venta", "Departamento", "Sucursal", "Medicamento", "Laboratorio", "Cantidad Vendida", "Precio Unitario", "Total Venta",
-        "Categoría", "Presentación", "Requiere Receta", "Vendedor", "Hora Venta", "Método de Pago", "Descuento", "Cliente"
-    ])
+        # Guardar Excel
+        #salida = "modelo_datos_ventas.xlsx"
+        with pd.ExcelWriter(nombre_salida, engine="openpyxl") as writer:
+            df_hechos.to_excel(writer, sheet_name="Tabla_Hechos", index=False)
+            for col, df_dim in tablas_dimensiones.items():
+                df_dim.to_excel(writer, sheet_name=f"Dim_{col}", index=False)
 
-    # Guardar en un archivo Excel
-    nombre_archivo = "reporte_ventas_medicamentos-resultante_"+ str(mes)+ ".xlsx"
-    df.to_excel(nombre_archivo, index=False)
+        messagebox.showinfo("Éxito", f"Archivo generado:\n{nombre_salida}")
 
-    print(f"Reporte generado: {nombre_archivo}")
+    except Exception as e:
+        messagebox.showerror("Error", str(e))
 
 
-for i in range(3, 13):
-    generar_datos(i)
+def seleccionar_archivo():
+    archivo = filedialog.askopenfilename(
+        title="Seleccionar archivo Excel",
+        filetypes=[("Archivos Excel", "*.xlsx *.xls")]
+    )
+    if archivo:
+        lbl_archivo.config(text=archivo)
+        procesar_excel(archivo)
 
+
+# ---------------- INTERFAZ ----------------
+root = tk.Tk()
+root.title("Generador de Tabla de Hechos")
+root.geometry("600x250")
+root.resizable(False, False)
+
+frame = ttk.Frame(root, padding=20)
+frame.pack(expand=True)
+
+ttk.Label(frame, text="Modelo Dimensional - Ventas de Medicamentos",
+          font=("Segoe UI", 14, "bold")).pack(pady=10)
+
+ttk.Button(frame, text="Seleccionar archivo Excel",
+           command=seleccionar_archivo).pack(pady=10)
+
+lbl_archivo = ttk.Label(frame, text="Ningún archivo seleccionado",
+                        wraplength=500)
+lbl_archivo.pack(pady=5)
+
+ttk.Label(frame, text="El archivo de salida se generará automáticamente",
+          foreground="gray").pack(pady=10)
+
+root.mainloop()
 
